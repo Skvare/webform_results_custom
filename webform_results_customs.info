@@ -1,0 +1,11 @@
+name = Webform Results Customs
+description = Provides webform results analyis and charts additions and customizations
+core = 7.x
+package = Custom
+version = "7.x-1.0"
+
+dependencies[] = webform_chart
+dependencies[] = print_pdf
+dependencies[] = date_popup
+
+files[] = includes/webform_results_customs-report-analysis.inc

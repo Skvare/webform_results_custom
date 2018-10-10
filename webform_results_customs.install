@@ -1,0 +1,9 @@
+<?php
+
+function webform_results_customs_install() {
+  
+}
+  
+function webform_results_customs_uninstall() {
+  
+}

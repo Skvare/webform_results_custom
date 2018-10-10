@@ -1,0 +1,442 @@
+<?php
+
+/**
+ * @file.
+ * Webform results, charts, and analysis additions and customizations.
+ */
+
+/**
+ * Implements hook_menu_alter().
+ *
+ * Override the stock Webform analysis page callback so we can customize to infinity and beyond.
+ *
+ * @param $items
+ */
+function webform_results_customs_menu_alter(&$items) {
+  if (!empty($items['node/%webform_menu/webform-results/analysis'])) {
+    $items['node/%webform_menu/webform-results/analysis']['page callback'] = 'webform_results_custom_analysis';
+    $items['node/%webform_menu/webform-results/analysis']['file path'] = drupal_get_path('module', 'webform_results_customs') . '/includes';
+    $items['node/%webform_menu/webform-results/analysis']['file'] = 'webform_results_customs.report-analysis.inc';
+  }
+}
+
+/**
+ * Implements hook_theme().
+ *
+ * @return array
+ */
+function webform_results_customs_theme() {
+  return [
+    'divtable' => [
+      'variables' => [
+        'header' => NULL,
+        'rows' => NULL,
+        'attributes' => [],
+        'caption' => NULL,
+        'colgroups' => [],
+        'sticky' => TRUE,
+        'empty' => [],
+      ],
+      'type' => 'module',
+      'theme path' => drupal_get_path('module', 'webform_results_customs'),
+      'function' => 'theme_divtable',
+    ],
+  ];
+}
+
+/**
+ * Implements hook_theme_registry_alter().
+ *
+ * Use our custom template for the webform analysis page
+ *
+ * @param $theme_registry
+ */
+function webform_results_customs_theme_registry_alter(&$theme_registry) {
+  if (!empty($theme_registry['webform_analysis'])) {
+    $theme_registry['webform_analysis']['template'] = drupal_get_path('module', 'webform_results_customs') . '/templates/webform-analysis';
+  }
+  if (!empty($theme_registry['webform_analysis_component'])) {
+    $theme_registry['webform_analysis_component']['template'] = drupal_get_path('module', 'webform_results_customs') . '/templates/webform-analysis-component';
+    $theme_registry['webform_analysis_component']['file'] = 'webform_results_customs.module';
+    $theme_registry['webform_analysis_component']['theme path'] = drupal_get_path('module', 'webform_results_customs');
+    $theme_registry['webform_analysis_component']['includes'][0] = drupal_get_path('module', 'webform_results_customs') . '/' . 'webform_results_customs.module';
+    $theme_registry['webform_analysis_component']['preprocess functions'][1] = 'webform_results_customs_template_preprocess_webform_analysis_component';
+  }
+  if (!empty($theme_registry['webform_analysis_component_basic'])) {
+    $theme_registry['webform_analysis_component_basic']['file'] = 'webform_results_customs.module';
+    $theme_registry['webform_analysis_component_basic']['theme path'] = drupal_get_path('module', 'webform_results_customs');
+    $theme_registry['webform_analysis_component_basic']['includes'][0] = drupal_get_path('module', 'webform_results_customs') . '/' . 'webform_results_customs.module';
+    $theme_registry['webform_analysis_component_basic']['function'] = 'webform_results_customs_theme_webform_analysis_component_basic';
+  }
+}
+
+/**
+ * Prerender function for webform-analysis-component.tpl.php.
+ */
+function webform_results_customs_template_preprocess_webform_analysis_component(&$variables) {
+  $component_analysis = $variables['component_analysis'];
+  $variables['node'] = $component_analysis['#node'];
+  $variables['component'] = $component_analysis['#component'];
+
+  // Ensure defaults.
+  $variables['component_analysis']['#data'] += array(
+    'table_header' => NULL,
+    'table_rows' => array(),
+    'other_data' => array(),
+  );
+  $variables['classes_array'][] = 'webform-analysis-component-' . $variables['component']['type'];
+  $variables['classes_array'][] = 'webform-analysis-component--' . str_replace('_', '-', implode('--', webform_component_parent_keys($variables['node'], $variables['component'])));
+}
+
+/**
+ * Render an individual component's analysis data in a table.
+ *
+ * @param $variables
+ *   An array of theming variables for this theme function. Included keys:
+ *   - $component: The component whose analysis is being rendered.
+ *   - $data: An array of array containing the analysis data. Contains the keys:
+ *     - table_header: If this table has more than a single column, an array
+ *       of header labels.
+ *     - table_rows: If this component has a table that should be rendered, an
+ *       array of values
+ */
+function webform_results_customs_theme_webform_analysis_component_basic($variables) {
+  $data = $variables['data'];
+
+  // Ensure defaults.
+  $data += array(
+    'table_header' => NULL,
+    'table_rows' => array(),
+    'other_data' => array(),
+  );
+
+  // Combine the "other data" into the table rows by default.
+  if (is_array($data['other_data'])) {
+    foreach ($data['other_data'] as $other_data) {
+      if (is_array($other_data)) {
+        $data['table_rows'][] = $other_data;
+      }
+      else {
+        $data['table_rows'][] = array(array(
+          'colspan' => 2,
+          'data' => $other_data,
+        ));
+      }
+    }
+  }
+  elseif (strlen($data['other_data'])) {
+    $data['table_rows'][] = array(
+      'colspan' => 2,
+      'data' => $data['other_data'],
+    );
+  }
+
+  return theme('divtable', array(
+    'header' => $data['table_header'],
+    'rows' => $data['table_rows'],
+    'sticky' => FALSE,
+    'attributes' => array('class' => array('webform-analysis-table')),
+  ));
+}
+
+/**
+ * Theme function, 'divtable'
+ *
+ * @param $variables
+ *
+ * @return string
+ */
+function theme_divtable($variables) {
+  $header = $variables['header'];
+  $rows = $variables['rows'];
+  $attributes = $variables['attributes'];
+  $caption = $variables['caption'];
+  $colgroups = $variables['colgroups'];
+  $sticky = $variables['sticky'];
+  $empty = $variables['empty'];
+
+  $attributes['class'][] = 'table-div';
+
+  $output = '<div' . drupal_attributes($attributes) . ">\n";
+
+  // Add the 'empty' row message if available.
+  if (!count($rows) && $empty) {
+    $header_count = 0;
+    foreach ($header as $header_cell) {
+      if (is_array($header_cell)) {
+        $header_count += isset($header_cell['colspan']) ? $header_cell['colspan'] : 1;
+      }
+      else {
+        $header_count++;
+      }
+    }
+    $rows[] = array(array('data' => $empty, 'colspan' => $header_count, 'class' => array('empty', 'message')));
+  }
+
+  // Format the table header:
+  if (count($header)) {
+    // HTML requires that the thead tag has tr tags in it followed by tbody
+    // tags. Using ternary operator to check and see if we have any rows.
+    $output .= (count($rows) ? ' <div class="divtable-row header-row">' : ' <div class="divtable-row header-row">');
+    foreach ($header as $cell) {
+      $output .= _webform_results_customs_theme_table_cell($cell, TRUE);
+    }
+    // Using ternary operator to close the tags based on whether or not there are rows
+    $output .= (count($rows) ? " </div>\n" : "</div>\n");
+  }
+
+
+  // Format the table rows:
+  if (count($rows)) {
+    $flip = array('even' => 'odd', 'odd' => 'even');
+    $class = 'even';
+    foreach ($rows as $number => $row) {
+      // Check if we're dealing with a simple or complex row
+      if (isset($row['data'])) {
+        $cells = $row['data'];
+        $no_striping = isset($row['no_striping']) ? $row['no_striping'] : FALSE;
+
+        // Set the attributes array and exclude 'data' and 'no_striping'.
+        $attributes = $row;
+        unset($attributes['data']);
+        unset($attributes['no_striping']);
+      }
+      else {
+        $cells = $row;
+        $attributes = array();
+        $no_striping = FALSE;
+      }
+      if (count($cells)) {
+        $attributes['class'][] = 'divtable-row';
+        // Add odd/even class
+        if (!$no_striping) {
+          $class = $flip[$class];
+          $attributes['class'][] = $class;
+        }
+
+        // Build row
+        $output .= ' <div' . drupal_attributes($attributes) . '>';
+        $i = 0;
+        foreach ($cells as $cell) {
+          $output .= _webform_results_customs_theme_table_cell($cell);
+        }
+        $output .= " </div>\n";
+      }
+    }
+  }
+
+  $output .= "</div>\n";
+  return $output;
+}
+
+/**
+ * Returns HTML output for a single table cell for theme_table().
+ *
+ * @param $cell
+ *   Array of cell information, or string to display in cell.
+ * @param bool $header
+ *   TRUE if this cell is a table header cell, FALSE if it is an ordinary
+ *   table cell. If $cell is an array with element 'header' set to TRUE, that
+ *   will override the $header parameter.
+ *
+ * @return
+ *   HTML for the cell.
+ */
+function _webform_results_customs_theme_table_cell($cell, $header = FALSE) {
+  $attributes = '';
+
+  if (is_array($cell)) {
+    $data = isset($cell['data']) ? $cell['data'] : '';
+    // Cell's data property can be a string or a renderable array.
+    if (is_array($data)) {
+      $data = drupal_render($data);
+    }
+    $header |= isset($cell['header']);
+    unset($cell['data']);
+    unset($cell['header']);
+    $cell['class'][] = 'divtable-cell';
+    $attributes = drupal_attributes($cell);
+  }
+  else {
+    $data = $cell;
+  }
+  if (empty($attributes)) {
+    $attributes = ' class="divtable-cell"';
+  }
+
+  if ($header) {
+    $output = "<div$attributes>$data</div>";
+  }
+  else {
+    $output = "<div$attributes>$data</div>";
+  }
+
+  return $output;
+}
+
+/**
+ * Implements hook_preprocess_print().
+ *
+ * @param $variables
+ */
+function webform_results_customs_preprocess_print($variables) {
+  // update variables here for the paths containing 'webform-results/analysis'
+  $path = request_path();
+  $path_array = explode('/', $path);
+  if (!empty($path_array[2]) && $path_array[2] == 'webform-results' && !empty($path_array[3]) && $path_array[3] == 'analysis') {
+    $variables['node']->type = 'webform-analysis';
+  }
+}
+
+/**
+ * Implements hook_webform_analysis_alter().
+ *
+ * @param $analysis
+ */
+function webform_results_customs_webform_analysis_alter(&$analysis) {
+  //watchdog('webform_results_customs', '<pre>' . print_r($analysis, TRUE) . '</pre>');
+  // add custom css file
+  drupal_add_css(drupal_get_path('module', 'webform_results_customs') . '/css/custom.css');
+
+  // build date range output
+  $analysis['date_range'] = '';
+  if (!empty($analysis['start_date'])) {
+    $analysis['date_range'] .= date('l, F jS Y', strtotime($analysis['start_date']));
+  }
+  else {
+    $analysis['date_range'] .= 'Course published date';
+  }
+  $analysis['date_range'] .= ' to ';
+  if (!empty($analysis['end_date'])) {
+    $analysis['date_range'] .= date('l, F jS Y', strtotime($analysis['end_date']));
+  }
+  else {
+    $analysis['date_range'] .= date('l, F jS Y');
+  }
+
+
+  if (empty($analysis['submission_count'])) {
+    $analysis['submission_count'] = 0;
+  }
+
+  // update variables here for the pdf version only...
+  $path = request_path();
+  $path_array = explode('/', $path);
+  if (!empty($path_array[0]) && $path_array[0] == 'printpdf') {
+    unset($analysis['form']);
+    unset($analysis['exposed_filter']);
+  }
+
+  // get average course rating number
+  $rating_component_key = variable_get('lms_course_rating_webform_field_key', '');
+  $course_rating_average = '';
+  foreach ($analysis['data'] as $d => $data) {
+    if ($data['#component']['form_key'] == $rating_component_key) {
+      if (!empty($data['#data']['table_rows'])) {
+        $total_value = 0;
+        foreach ($data['#data']['table_rows'] as $row_num => $row_data) {
+          if ($row_num == 0) {
+            foreach ($row_data as $i => $r_data) {
+              if ($i != 0) {
+                if (is_numeric($r_data)) {
+                  $total_value += $i * $r_data;
+                }
+                else {
+                  $values = explode(' - ', $r_data);
+                  if (isset($values[0]) && is_numeric($values[0])) {
+                    $total_value += $i * $values[0];
+                  }
+                }
+              }
+            }
+          }
+          else {
+            break;
+          }
+        }
+        if ($analysis['submission_count'] > 0) {
+          $course_rating_average = number_format($total_value / $analysis['submission_count'], 2);
+        }
+      }
+      break;
+    }
+  }
+  if (is_numeric($course_rating_average)) {
+    $analysis['course_rating_average'] = $course_rating_average;
+  }
+}
+
+/**
+ * Implements hook_webform_analysis_component_data_alter().
+ *
+ * @param $data
+ * @param $node
+ * @param $component
+ */
+function webform_results_customs_webform_analysis_component_data_alter(&$data, $node, $component) {
+  if (!empty($data['percent'])) {
+    switch($component['type']) {
+      case 'select':
+      case 'textarea':
+      case 'textfield':
+        $total_count = 0;
+        if (!empty($data['table_rows'])) {
+          foreach ($data['table_rows'] as $row) {
+            $total_count += $row[1];
+          }
+          foreach ($data['table_rows'] as $delta => $row) {
+            $data['table_rows'][$delta][2] = number_format(($row[1] / $total_count) * 100, 2) . '%';
+          }
+        }
+        break;
+      case 'grid':
+        if (!empty($data['table_rows'])) {
+          foreach ($data['table_rows'] as $row_num => $row) {
+            $total_row_count = 0;
+            foreach ($row as $delta => $column_data) {
+              if ($delta == 0) continue;
+              $total_row_count += $column_data;
+            }
+            foreach ($row as $delta => $column_data) {
+              if ($delta == 0) continue;
+              $column_percentage = number_format(($column_data / $total_row_count) * 100, 2);
+              $data['table_rows'][$row_num][$delta] .= ' - ' . $column_percentage . '%';
+            }
+          }
+        }
+        break;
+    }
+  }
+  if (empty($data['table_rows'])) {
+    $data['table_rows'][0][0] = 'No submissions for this component for the chosen date range.';
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * @param $form
+ * @param $form_state
+ * @param $form_id
+ */
+function webform_results_customs_form_alter(&$form, &$form_state, $form_id) {
+  // webform analysis View exposed filter form
+  if ($form_id == 'views_exposed_form') {
+    if ($form['#id'] == 'views-exposed-form-webform-analysis-default') {
+      // append percent url parameter if exists
+      $url_components = drupal_parse_url(request_uri());
+      $form['percent'] = [
+        '#title' => t('Display percentages'),
+        '#description' => t('Display percentages along with counts for results'),
+        '#type' => 'checkbox',
+        '#return' => 1,
+        '#default_value' => !empty($url_components['query']['percent']) ? $url_components['query']['percent'] : 0,
+        '#weight' => 1,
+      ];
+      $form['completed']['#weight'] = 0;
+      $form['completed_1']['#weight'] = 1;
+      $form['submit']['#weight'] = 2;
+      $form['reset']['#weight'] = 3;
+    }
+  }
+}

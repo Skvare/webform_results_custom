@@ -1,0 +1,40 @@
+h2.analysis-title, #page-title {
+    font-size: 36px;
+    color:#FFF;
+    background-color: #016098;
+    padding:0.25em 0;
+}
+
+.webform-analysis-component {
+    display:block !important;
+    width:100% !important;
+}
+
+.webform-analysis-table {
+    width:90% !important;
+}
+
+.form-item-percent {
+    float:left;
+    margin-right: 2em !important;
+    margin-top: 2em !important;
+}
+
+.divtable-cell {
+    display:inline-block;
+    width:33%;
+    vertical-align:middle;
+    padding:1em;
+}
+
+.divtable-row {
+    border-top: 1px solid #dddddd;
+}
+
+.divtable-row.odd {
+    background-color: #f9f9f9;
+}
+
+.webform-analysis-component-grid .divtable-cell {
+    width:15%;
+}
